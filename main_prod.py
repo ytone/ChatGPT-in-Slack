@@ -19,11 +19,20 @@ from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 from slack_bolt import App, Ack, BoltContext
 
 from app.bolt_listeners import register_listeners, before_authorize
-from app.env import USE_SLACK_LANGUAGE, SLACK_APP_LOG_LEVEL, DEFAULT_OPENAI_MODEL
+from app.env import (
+    USE_SLACK_LANGUAGE,
+    SLACK_APP_LOG_LEVEL,
+    OPENAI_MODEL,
+    OPENAI_TEMPERATURE,
+    OPENAI_API_TYPE,
+    OPENAI_API_BASE,
+    OPENAI_API_VERSION,
+    OPENAI_DEPLOYMENT_ID,
+    OPENAI_FUNCTION_CALL_MODULE_NAME,
+)
 from app.slack_ops import (
     build_home_tab,
     DEFAULT_HOME_TAB_MESSAGE,
-    DEFAULT_HOME_TAB_CONFIGURE_LABEL,
 )
 from app.i18n import translate
 
@@ -144,38 +153,42 @@ def handler(event, context_):
                 config = json.loads(config_str)
                 context["OPENAI_API_KEY"] = config.get("api_key")
                 context["OPENAI_MODEL"] = config.get("model")
+                context["OPENAI_TEMPERATURE"] = config.get(
+                    "temperature", OPENAI_TEMPERATURE
+                )
             else:
                 # The legacy data format
                 context["OPENAI_API_KEY"] = config_str
-                context["OPENAI_MODEL"] = DEFAULT_OPENAI_MODEL
+                context["OPENAI_MODEL"] = OPENAI_MODEL
+                context["OPENAI_TEMPERATURE"] = OPENAI_TEMPERATURE
         except:  # noqa: E722
             context["OPENAI_API_KEY"] = None
+            context["OPENAI_MODEL"] = None
+            context["OPENAI_TEMPERATURE"] = None
+
+        context["OPENAI_API_TYPE"] = OPENAI_API_TYPE
+        context["OPENAI_API_BASE"] = OPENAI_API_BASE
+        context["OPENAI_API_VERSION"] = OPENAI_API_VERSION
+        context["OPENAI_DEPLOYMENT_ID"] = OPENAI_DEPLOYMENT_ID
+        context["OPENAI_FUNCTION_CALL_MODULE_NAME"] = OPENAI_FUNCTION_CALL_MODULE_NAME
         next_()
 
     @app.event("app_home_opened")
     def render_home_tab(client: WebClient, context: BoltContext):
         message = DEFAULT_HOME_TAB_MESSAGE
-        configure_label = DEFAULT_HOME_TAB_CONFIGURE_LABEL
         try:
             s3_client.get_object(Bucket=openai_bucket_name, Key=context.team_id)
             message = "This app is ready to use in this workspace :raised_hands:"
         except:  # noqa: E722
             pass
-
         openai_api_key = context.get("OPENAI_API_KEY")
-        if openai_api_key is not None:
-            message = translate(
-                openai_api_key=openai_api_key, context=context, text=message
-            )
-            configure_label = translate(
-                openai_api_key=openai_api_key,
-                context=context,
-                text=DEFAULT_HOME_TAB_CONFIGURE_LABEL,
-            )
-
         client.views_publish(
             user_id=context.user_id,
-            view=build_home_tab(message, configure_label),
+            view=build_home_tab(
+                openai_api_key=openai_api_key,
+                context=context,
+                message=message,
+            ),
         )
 
     @app.action("configure")
@@ -227,8 +240,12 @@ def handler(event, context_):
                                     "value": "gpt-3.5-turbo",
                                 },
                                 {
-                                    "text": {"type": "plain_text", "text": "GPT-4"},
+                                    "text": {"type": "plain_text", "text": "GPT-4 8K"},
                                     "value": "gpt-4",
+                                },
+                                {
+                                    "text": {"type": "plain_text", "text": "GPT-4 32K"},
+                                    "value": "gpt-4-32k",
                                 },
                             ],
                             "initial_option": {

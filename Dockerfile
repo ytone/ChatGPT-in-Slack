@@ -1,11 +1,11 @@
-FROM --platform=linux/amd64 python:3.11.3-slim-buster as builder
+FROM --platform=linux/amd64 python:3.11.4-slim-buster as builder
 COPY requirements.txt /build/
 WORKDIR /build/
 RUN pip install -U pip && pip install -r requirements.txt
 ENV OPENAI_MODEL=gpt-4
 ENV OPENAI_TIMEOUT_SECONDS=120
 
-FROM --platform=linux/amd64 python:3.11.3-slim-buster as app
+FROM --platform=linux/amd64 python:3.11.4-slim-buster as app
 WORKDIR /app/
 COPY *.py /app/
 RUN mkdir /app/app/

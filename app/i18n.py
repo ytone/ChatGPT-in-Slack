@@ -3,7 +3,7 @@ from typing import Optional
 import openai
 from slack_bolt import BoltContext
 
-from .openai_ops import GPT_3_5_TURBO_0301_MODEL
+from .openai_constants import GPT_3_5_TURBO_0613_MODEL
 
 # All the supported languages for Slack app as of March 2023
 _locale_to_lang = {
@@ -32,7 +32,10 @@ def from_locale_to_lang(locale: Optional[str]) -> Optional[str]:
 _translation_result_cache = {}
 
 
-def translate(*, openai_api_key: str, context: BoltContext, text: str) -> str:
+def translate(*, openai_api_key: Optional[str], context: BoltContext, text: str) -> str:
+    if openai_api_key is None or len(openai_api_key.strip()) == 0:
+        return text
+
     lang = from_locale_to_lang(context.get("locale"))
     if lang is None or lang == "English":
         return text
@@ -42,23 +45,24 @@ def translate(*, openai_api_key: str, context: BoltContext, text: str) -> str:
         return cached_result
     response = openai.ChatCompletion.create(
         api_key=openai_api_key,
-        model=GPT_3_5_TURBO_0301_MODEL,
+        model=GPT_3_5_TURBO_0613_MODEL,
         messages=[
             {
                 "role": "system",
                 "content": "You're the AI model that primarily focuses on the quality of language translation. "
-                "You must not change the meaning of sentences when translating them into a different language. "
-                "You must provide direct translation result as much as possible. "
-                "When the given text is a single verb/noun, its translated text must be a norm/verb form too. "
+                "You always respond with the only the translated text in a format suitable for Slack user interface. "
                 "Slack's emoji (e.g., :hourglass_flowing_sand:) and mention parts must be kept as-is. "
-                "Your response must not include any additional notes in English. "
-                "Your response must omit English version / pronunciation guide for the result. ",
+                "You don't change the meaning of sentences when translating them into a different language. "
+                "When the given text is a single verb/noun, its translated text must be a norm/verb form too. "
+                "When the given text is in markdown format, the format must be kept as much as possible. ",
             },
             {
                 "role": "user",
-                "content": f"Can you translate {text} into {lang} in a professional tone? "
-                "Please respond with the only the translated text in a format suitable for Slack user interface. "
-                "No need to append any English notes and guides.",
+                "content": f"Can you translate the following text into {lang} in a professional tone? "
+                "Your response must omit any English version / pronunciation guide for the result. "
+                "Again, no need to append any English notes and guides about the result. "
+                "Just return the translation result. "
+                f"Here is the original sentence you need to translate:\n{text}",
             },
         ],
         top_p=1,
@@ -69,6 +73,10 @@ def translate(*, openai_api_key: str, context: BoltContext, text: str) -> str:
         frequency_penalty=0,
         logit_bias={},
         user="system",
+        api_base=context.get("OPENAI_API_BASE"),
+        api_type=context.get("OPENAI_API_TYPE"),
+        api_version=context.get("OPENAI_API_VERSION"),
+        deployment_id=context.get("OPENAI_DEPLOYMENT_ID"),
     )
     translated_text = response["choices"][0]["message"].get("content")
     _translation_result_cache[f"{lang}:{text}"] = translated_text
